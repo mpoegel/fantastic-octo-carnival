@@ -3,3 +3,6 @@ data
 
 # reports
 **/*.pdf
+
+# binary files
+bin
