@@ -8,6 +8,7 @@ slides/%.pdf: slides/%.md
 # Download and munge the data sets
 data: init
 	./setup/data.sh
+	python src/make-datasets.py
 
 init:
 	./setup/init.sh
