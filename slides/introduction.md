@@ -11,7 +11,7 @@ road networks and match them with the major cities**
 
 
 ### Data
-Roads are undirected edges road intersections are vertices.
+Roads are undirected edges and road intersections are vertices.
 
 * Minnesota (2,635 nodes): \
   [http://www.cise.ufl.edu/research/sparse/matrices/Gleich/minnesota.html](http://www.cise.ufl.edu/research/sparse/matrices/Gleich/minnesota.html)
@@ -42,11 +42,12 @@ Francisco, CA and Oldenburg, Germany. \
 
 
 ## Expected Outcome
-* Results will be evaluated using the longitude and latitude data that accompanies each of the road
-networks
-    * Total absolute distance error metric
 * Create a method for taking an unlabeled network and attaching semantic data to the nodes and
 edges based on the graph’s structure
+* Results will be evaluated using the longitude and latitude data that accompanies each of the road
+networks
+    * Average absolute distance error metric
+    * Logarithmic loss
 
 
 ## Progress
