@@ -20,11 +20,11 @@ Roads are undirected edges road intersections are vertices.
 * Northeast United States (1,524,453 nodes): \
   [http://www.dis.uniroma1.it/challenge9/download.shtml](http://www.dis.uniroma1.it/challenge9/download.shtml)
 
-## Data (continued)
+## Ground Truth Data
 * City names plus longitude and latitude: \
   [http://www.realestate3d.com/gps/latlong.htm](http://www.realestate3d.com/gps/latlong.htm)
-* City populations for every US state: \
-  [http://www.togetherweteach.com/TWTIC/uscityinfo/23mn/mnpopr/23mnpr.htm](http://www.togetherweteach.com/TWTIC/uscityinfo/23mn/mnpopr/23mnpr.htm)
+* City populations for cities in every US state: \
+  2015 US Census estimates
 
 ## The Big Picture
 
@@ -44,11 +44,13 @@ Francisco, CA and Oldenburg, Germany. \
 ## Expected Outcome
 * Results will be evaluated using the longitude and latitude data that accompanies each of the road
 networks
-* Create a method for taking an unlabeled network and attaching semantic data to the nodes and edges based
-on the graph’s structure
+    * Total absolute distance error metric
+* Create a method for taking an unlabeled network and attaching semantic data to the nodes and
+edges based on the graph’s structure
 
 
 ## Progress
 
-* Set up GitHub repository
-* Wrote scripts to download data sets and build the ground truth file
+* Set up a project repository
+* Located sources for population and location data 
+* Wrote scripts to download data sets and build the ground truth file for Minnesota
