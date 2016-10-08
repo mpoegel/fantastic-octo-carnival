@@ -1,3 +1,7 @@
+# Compile the project
+graph:
+	g++ -fopenmp src/graph.cpp src/main.cpp -o bin/graph
+
 # Make the pdf slides from the markdown files
 SLIDES := $(wildcard slides/*.md)
 slides: $(SLIDES:md=pdf)
