@@ -7,10 +7,17 @@ void read_edge(char* filename, int &num_verts, int &num_edges, int* &srcs, int* 
   string line;
   infile.open(filename);
 
-  getline(infile, line, ' ');
-  num_verts = atoi(line.c_str());
-  getline(infile, line);
-  num_edges = atoi(line.c_str());
+  getline(infile, line, '\n');
+  while (line[0] == '%') {
+    getline(infile, line, '\n');
+  }
+  istringstream iss(line);
+  string tmp;
+  iss >> tmp;
+  num_verts = atoi(tmp.c_str());
+  iss >> tmp;
+  num_edges = atoi(tmp.c_str());
+  iss >> tmp;
 
   int src, dst;
   int counter = 0;
