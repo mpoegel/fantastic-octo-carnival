@@ -110,15 +110,21 @@ int main(int argc, char* argv[])
   int num_edges;
   int* out_array;
   int* out_degree_list;
+  float* latitudes;
+  float* longitudes;
 
   read_edge(graph_file, num_verts, num_edges, srcs, dsts);
+  read_vert_latlong(latlong_graph_file, latitudes, longitudes);
   create_csr(num_verts, num_edges, srcs, dsts, out_array, out_degree_list);
-  graph g = {num_verts, num_edges, out_array, out_degree_list};
+  graph g = {num_verts, num_edges, out_array, out_degree_list, latitudes, longitudes};
   
   delete [] srcs;
   delete [] dsts;
   delete [] out_array;
   delete [] out_degree_list;
+  delete [] latitudes;
+  delete [] longitudes;
+
   delete [] populations;
   for (unsigned int i=0; i<num_cities; ++i) {
     delete [] latlong[i];

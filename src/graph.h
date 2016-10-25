@@ -15,8 +15,11 @@ struct graph {
   int num_edges;
   int* out_array;
   int* out_degree_list;
+  float* latitudes;
+  float* longitudes;
 };
 
 void read_edge(char* filename, int &num_verts, int &num_edges, int* &srcs, int* &dsts);
+void read_vert_latlong(char* filename, float* &latitudes, float* &longitudes);
 void create_csr(int num_verts, int num_edges, int* srcs, int* dsts, int* &out_array,
                 int* &out_degree_list);

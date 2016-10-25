@@ -43,6 +43,39 @@ void read_edge(char* filename, int &num_verts, int &num_edges, int* &srcs, int* 
 }
 
 
+void read_vert_latlong(char* filename, float* &latitudes, float* &longitudes)
+{
+  ifstream infile;
+  string line;
+  infile.open(filename);
+
+  getline(infile, line, '\n');
+  while (line[0] == '%') {
+    getline(infile, line, '\n');
+  }
+
+  istringstream iss(line);
+  string tmp;
+  iss >> tmp;
+  int num_verts = atoi(tmp.c_str());
+  iss >> tmp;
+
+  latitudes = new float[num_verts];
+  longitudes = new float[num_verts];
+
+  for (int i=0; i<num_verts; ++i) {
+    getline(infile, line);
+    longitudes[i] = atof(line.c_str());
+  }
+  for (int i=0; i<num_verts; ++i) {
+    getline(infile, line);
+    latitudes[i] = atof(line.c_str());
+  }
+
+  infile.close();
+}
+
+
 void create_csr(int num_verts, int num_edges, int* srcs, int* dsts, int* &out_array,
                 int* &out_degree_list)
 {
