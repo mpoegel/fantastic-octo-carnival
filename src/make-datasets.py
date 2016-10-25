@@ -24,11 +24,11 @@ def parse_lat_long_cities(state):
         ids.append((i, name))
         i += 1
     with open('data/processed/{0}-latlong.dat'.format(state), 'w+') as fp:
-        fp.write('{0}\n'.format(len(output)))        
+        fp.write('{0}\n'.format(len(output)))
         for city in output:
             fp.write(city + '\n')
     with open('data/processed/{0}-cities.dat'.format(state), 'w+') as fp:
-        fp.write('{0}\n'.format(len(ids)))        
+        fp.write('{0}\n'.format(len(ids)))
         for i in range(len(ids)):
             fp.write('{0} {1}\n'.format(i, ids[i]))
     return ids
@@ -54,7 +54,7 @@ def parse_cities_pop(filename, state, cities):
         for city in cities:
             fp.write('{0} {1}\n'.format(city[0], city[1]))
     with open('data/processed/{0}-pops.dat'.format(state), 'w+') as fp:
-        fp.write('{0}\n'.format(len(pops)))        
+        fp.write('{0} {1}\n'.format(len(pops), len(cities)))
         for pop in pops:
             fp.write('{0} {1}\n'.format(pop[0], pop[1]))
     return pops
@@ -62,12 +62,12 @@ def parse_cities_pop(filename, state, cities):
 
 def load_cities(filename, state):
     res = []
-    lat_longs = []    
+    lat_longs = []
     i = 0
     with open(filename, 'r') as fp:
         for line in fp:
             bits = line.split(',')
-            lat_longs.append((i, bits[0].strip(), bits[1].strip()))            
+            lat_longs.append((i, bits[0].strip(), bits[1].strip()))
             city = bits[2].strip()
             res.append((i, city))
             i += 1
