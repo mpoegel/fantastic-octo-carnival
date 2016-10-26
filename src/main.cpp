@@ -2,29 +2,30 @@
 #include <iostream>
 
 #include "graph.h"
+#include "utils.h"
 
 using namespace std;
 
 
-int* read_populations(char* filename, int* num_lines)
+int* read_populations(char* filename, int* num_cities)
 {
   ifstream infile;
   string line;
   infile.open(filename);
   
   getline(infile, line, ' ');
-  *num_lines = atoi(line.c_str());
+  int num_lines = atoi(line.c_str());
   getline(infile, line);
-  int num_cities = atoi(line.c_str());
+  *num_cities = atoi(line.c_str());
 
-  int* populations = new int[num_cities];
-  for (unsigned int i=0; i<num_cities; ++i) {
+  int* populations = new int[*num_cities];
+  for (unsigned int i=0; i<*num_cities; ++i) {
     populations[i] = -1;
   }
   
   int id;
   int pop;
-  for (unsigned int i=0; i<*num_lines; ++i) {
+  for (unsigned int i=0; i<num_lines; ++i) {
     getline(infile, line, ' ');
     id = atoi(line.c_str());
     getline(infile, line);
@@ -84,6 +85,32 @@ string* read_cities(char* filename)
 }
 
 
+void calculate_error(graph* g, int* y_hat, float** latlong, int num_cities)
+{
+  double* dists = new double[num_cities];
+  double total_dist = 0.0;
+  unsigned int missing = 0;
+  for (unsigned int i=0; i<num_cities; ++i) {
+    int v = y_hat[i];
+    if (v > 0) {
+      double d = sqrt(pow(g->latitudes[v] - latlong[i][0], 2) + 
+                      pow(g->longitudes[v] - latlong[i][1], 2));
+      dists[i] = d;
+      total_dist += d;
+    } else {
+      ++missing;
+    }
+  }
+  double avg_dist = total_dist / (double)num_cities;
+  
+  printf("Analysis on %d/%d cities\n", num_cities - missing, num_cities);
+  printf("Total error: %.3f\n", total_dist);
+  printf("Average error: %.3f\n", avg_dist);
+
+  delete [] dists;
+}
+
+
 int main(int argc, char* argv[])
 {
 
@@ -117,13 +144,20 @@ int main(int argc, char* argv[])
   read_vert_latlong(latlong_graph_file, latitudes, longitudes);
   create_csr(num_verts, num_edges, srcs, dsts, out_array, out_degree_list);
   graph g = {num_verts, num_edges, out_array, out_degree_list, latitudes, longitudes};
-  
+
+  double* CI = centrality_index(&g);
+  int* y_hat = match_by_population(&g, CI, populations, num_cities);
+
+  calculate_error(&g, y_hat, latlong, num_cities);
+
   delete [] srcs;
   delete [] dsts;
   delete [] out_array;
   delete [] out_degree_list;
   delete [] latitudes;
   delete [] longitudes;
+  delete [] CI;
+  delete [] y_hat;
 
   delete [] populations;
   for (unsigned int i=0; i<num_cities; ++i) {
