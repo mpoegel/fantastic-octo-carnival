@@ -93,8 +93,8 @@ void calculate_error(graph* g, int* y_hat, float** latlong, int num_cities)
   for (unsigned int i=0; i<num_cities; ++i) {
     int v = y_hat[i];
     if (v > 0) {
-      double d = sqrt(pow(g->latitudes[v] - latlong[i][0], 2) + 
-                      pow(g->longitudes[v] - latlong[i][1], 2));
+      double d = measureLatLongDist(g->latitudes[v], g->longitudes[v], latlong[i][0],
+                                    latlong[i][1]);
       dists[i] = d;
       total_dist += d;
     } else {
@@ -104,8 +104,8 @@ void calculate_error(graph* g, int* y_hat, float** latlong, int num_cities)
   double avg_dist = total_dist / (double)num_cities;
   
   printf("Analysis on %d/%d cities\n", num_cities - missing, num_cities);
-  printf("Total error: %.3f\n", total_dist);
-  printf("Average error: %.3f\n", avg_dist);
+  printf("Total error: %.3f km\n", total_dist);
+  printf("Average error: %.3f km\n", avg_dist);
 
   delete [] dists;
 }
