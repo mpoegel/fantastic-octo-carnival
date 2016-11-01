@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cstdlib>
 #include <iostream>
 
@@ -101,11 +102,24 @@ void calculate_error(graph* g, int* y_hat, float** latlong, int num_cities)
       ++missing;
     }
   }
+  sort(dists, dists + num_cities);
+  double min_dist = dists[0];
+  double max_dist = dists[num_cities - 1];
   double avg_dist = total_dist / (double)num_cities;
+  double med_dist;
+  int mid = num_cities / 2;
+  if (num_cities % 2 == 0) {
+    med_dist = (dists[mid] + dists[mid - 1]) / 2.0;
+  } else {
+    med_dist = dists[mid];
+  }
   
   printf("Analysis on %d/%d cities\n", num_cities - missing, num_cities);
-  printf("Total error: %.3f km\n", total_dist);
-  printf("Average error: %.3f km\n", avg_dist);
+  printf("  Total error: %.3f km\n", total_dist);
+  printf("  Max error: %.3f km\n", max_dist);
+  printf("  Min error: %.3f km\n", min_dist);
+  printf("  Average error: %.3f km\n", avg_dist);
+  printf("  Median error: %.3f km\n", med_dist);
 
   delete [] dists;
 }
