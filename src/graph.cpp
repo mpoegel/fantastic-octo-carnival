@@ -108,47 +108,18 @@ void create_csr(int num_verts, int num_edges, int* srcs, int* dsts, int* &out_ar
 }
 
 
-double* centrality_index(graph* g)
+void shortest_paths(graph* g, int** dist, int** next)
 {
-  // calculate individual measures
-  int* betweenness = calc_betweenness(g);
-
-  // aggregate measures together to form the final index and normalize
-  double* CI = new double[g->num_verts];
-  double max = 0.0;
-  for (unsigned int i=0; i<g->num_verts; ++i) {
-    double val = (double)betweenness[i];
-    CI[i] = val;
-    if (val > max) {
-      max = val;
-    }
-  }
-  for (unsigned int i=0; i<g->num_verts; ++i) {
-    CI[i] /= max;
-  }
-
-  delete [] betweenness;
-
-  return CI;
-}
-
-
-int* calc_betweenness(graph* g)
-{
-  double timer = omp_get_wtime();
-
   // get the shortest paths using Floyd-Warshall
-  int** dist = new int*[g->num_verts];
-  int** next = new int*[g->num_verts];
   for (int i=0; i<g->num_verts; ++i) {
     dist[i] = new int[g->num_verts];
-    next[i] = new int[g->num_verts];
+    if (next) next[i] = new int[g->num_verts];
     for (int k=0; k<g->num_verts; ++k) {
       dist[i][k] = -1;
-      next[i][k] = -1;
+      if (next) next[i][k] = -1;
     }
     dist[i][i] = 0;
-    next[i][i] = i;
+    if (next) next[i][i] = i;
   }
 
   for (int v=0; v<g->num_verts; ++v) {
@@ -157,7 +128,7 @@ int* calc_betweenness(graph* g)
     for (int k=0; k<out_degree; ++k) {
       int u = out_vertices[k];
       dist[v][u] = 1;
-      next[v][u] = u;
+      if (next) next[v][u] = u;
     }
   }
 
@@ -169,11 +140,56 @@ int* calc_betweenness(graph* g)
         }
         if (dist[i][j] == -1 || dist[i][k] + dist[k][j] < dist[i][j]) {
           dist[i][j] = dist[i][k] + dist[k][j];
-          next[i][j] = next[i][k];
+          if (next) next[i][j] = next[i][k];
         }
       }
     }
   }
+}
+
+
+double* centrality_index(graph* g)
+{
+  int** dist = new int*[g->num_verts];
+  int** next = new int*[g->num_verts];
+  shortest_paths(g, dist, next);
+  // calculate individual measures
+  int* betweenness = calc_betweenness(g, dist, next);
+  int* closeness = calc_closeness(g, dist);
+
+  // aggregate measures together to form the final index and normalize
+  double* CI = new double[g->num_verts];
+  double max = 0.0;
+  for (unsigned int i=0; i<g->num_verts; ++i) {
+    double b = (double)betweenness[i];
+    double c = (double)closeness[i];
+    double val = (0.5 * b) + (0.5 * c);
+    CI[i] = val;
+    if (val > max) {
+      max = val;
+    }
+  }
+  for (unsigned int i=0; i<g->num_verts; ++i) {
+    CI[i] /= max;
+  }
+
+  delete [] betweenness;
+  delete [] closeness;
+  
+  for (int i=0; i<g->num_verts; ++i) {
+    delete [] dist[i];
+    delete [] next[i];
+  }
+  delete [] dist;
+  delete [] next;
+
+  return CI;
+}
+
+
+int* calc_betweenness(graph* g, int** dist, int** next)
+{
+  double timer = omp_get_wtime();
   
   int* betweenness = new int[g->num_verts];
   // count the shortest paths that go through each vertex
@@ -196,14 +212,29 @@ int* calc_betweenness(graph* g)
   timer = omp_get_wtime() - timer;
   printf("Betweenness finished after %.3f seconds\n", timer);
 
-  for (int i=0; i<g->num_verts; ++i) {
-    delete [] dist[i];
-    delete [] next[i];
-  }
-  delete [] dist;
-  delete [] next;
-
   return betweenness;
+}
+
+
+int* calc_closeness(graph* g, int** dist)
+{
+  double timer = omp_get_wtime();
+
+  int* closeness = new int[g->num_verts];
+
+  for (int i=0; i<g->num_verts; ++i) {
+    closeness[i] = 0;
+    for (int k=0; k<g->num_verts; ++k) {
+      if (dist[i][k] > 0) {
+        closeness[i] += dist[i][k];
+      }
+    }
+  }
+
+  timer = omp_get_wtime() - timer;
+  printf("Closeness finished after %.3f seconds\n", timer);
+
+  return closeness;
 }
 
 
