@@ -1,7 +1,7 @@
 #include "utils.h"
 
 
-int measureLatLongDist(double lat1, double lon1, double lat2, double lon2)
+double measureLatLongDist(double lat1, double lon1, double lat2, double lon2)
 {
   double dLat = lat2 * M_PI / 180 - lat1 * M_PI / 180;
   double dLon = lon2 * M_PI / 180 - lon1 * M_PI / 180;

@@ -10,7 +10,7 @@ using namespace std;
 #define RADIUS_EARTH 6378.137
 
 
-int measureLatLongDist(double lat1, double lon1, double lat2, double lon2);
+double measureLatLongDist(double lat1, double lon1, double lat2, double lon2);
 
 
 template<typename T>

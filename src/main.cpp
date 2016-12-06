@@ -1,8 +1,9 @@
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
-#include <cmath>
+#include <string>
 
 #include "graph.h"
 #include "utils.h"
@@ -127,24 +128,38 @@ void calculate_error(graph* g, int* y_hat, float** latlong, int num_cities)
 }
 
 
-void save_results(char* filename, graph* g, int* y_hat, int num_cities)
+void save_yhat(const char* filename, graph* g, int* y_hat, int num_cities)
 {
-  ofstream fs(filename);
-  if (!fs.is_open()) {
+  FILE* fp = fopen(filename, "w");
+  if (fp == NULL) {
     fprintf(stderr, "Error: could not open output file %s\n", filename);
     return;
   }
-  fs << "id,lat,lon" << endl;
+  fprintf(fp, "id,lat,lon\n");
   float epsilon = 0.001;
   for (unsigned int i=0; i<num_cities; ++i) {
     int v = y_hat[i];
     if (abs(g->latitudes[v]) < epsilon || abs(g->longitudes[v]) < epsilon) {
       continue;
     }
-    fs << i << "," << g->latitudes[v] << "," << g->longitudes[v] << endl;
+    fprintf(fp, "%d,%f,%f\n", i, g->latitudes[v], g->longitudes[v]);
   }
-  
-  fs.close();
+  fclose(fp);
+}
+
+
+void save_CI(const char* filename, graph* g, double* CI)
+{
+  FILE* fp = fopen(filename, "w");
+  if (fp == NULL) {
+    fprintf(stderr, "Error: could not open output file %s\n", filename);
+    return;
+  }
+  fprintf(fp, "id,lat,lon,CI\n");
+  for (unsigned int v=0; v<g->num_verts; ++v) {
+    fprintf(fp, "%d,%f,%f,%f\n", v, g->latitudes[v], g->longitudes[v], CI[v]);
+  }
+  fclose(fp);
 }
 
 
@@ -173,14 +188,16 @@ int main(int argc, char* argv[])
   int num_verts;
   int num_edges;
   int* out_array;
+  double* out_weights;
   int* out_degree_list;
   float* latitudes;
   float* longitudes;
 
   read_edge(graph_file, num_verts, num_edges, srcs, dsts);
   read_vert_latlong(latlong_graph_file, latitudes, longitudes);
-  create_csr(num_verts, num_edges, srcs, dsts, out_array, out_degree_list);
-  graph g = {num_verts, num_edges, out_array, out_degree_list, latitudes, longitudes};
+  create_csr(num_verts, num_edges, srcs, dsts, latitudes, longitudes, out_array, out_weights,
+             out_degree_list);
+  graph g = {num_verts, num_edges, out_array, out_degree_list, latitudes, longitudes, out_weights};
 
   double* CI = centrality_index(&g);
   int* y_hat = match_by_population(&g, CI, populations, num_cities);
@@ -188,7 +205,11 @@ int main(int argc, char* argv[])
   calculate_error(&g, y_hat, latlong, num_cities);
 
   if (argc >= 7) {
-    save_results(argv[6], &g, y_hat, num_cities);
+    string base_filename = string(argv[6]);
+    const char* yhat_filename = string(base_filename + ".yhat").c_str();
+    save_yhat(yhat_filename, &g, y_hat, num_cities);
+    const char* ci_filename = string(base_filename + ".ci").c_str();    
+    save_CI(ci_filename, &g, CI);
   }
 
   delete [] srcs;

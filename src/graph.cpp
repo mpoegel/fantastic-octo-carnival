@@ -76,14 +76,16 @@ void read_vert_latlong(char* filename, float* &latitudes, float* &longitudes)
 }
 
 
-void create_csr(int num_verts, int num_edges, int* srcs, int* dsts, int* &out_array,
-                int* &out_degree_list)
+void create_csr(int num_verts, int num_edges, int* srcs, int* dsts, float* latitudes, 
+                float* longitudes, int* &out_array, double* &out_weights, int* &out_degree_list)
 {
   out_array = new int[num_edges];
+  out_weights = new double[num_edges];
   out_degree_list = new int[num_verts+1];
 
   for (unsigned int i=0; i<num_edges; i++) {
     out_array[i] = 0;
+    out_weights[i] = 0;
   }
   for (unsigned int i=0; i<num_verts + 1; i++) {
     out_degree_list[i] = 0;
@@ -101,18 +103,21 @@ void create_csr(int num_verts, int num_edges, int* srcs, int* dsts, int* &out_ar
   }
   copy(out_degree_list, out_degree_list + num_verts, temp_counts);
   for (unsigned int i=0; i<num_edges; i++) {
-    out_array[temp_counts[srcs[i]]++] = dsts[i];
+    out_array[temp_counts[srcs[i]]] = dsts[i];
+    double w = measureLatLongDist(latitudes[srcs[i]], longitudes[srcs[i]], latitudes[dsts[i]],
+                                  longitudes[dsts[i]]);
+    out_weights[temp_counts[srcs[i]]++] = w;
   }
   
   delete [] temp_counts;
 }
 
 
-void shortest_paths(graph* g, int** dist, int** next)
+void shortest_paths(graph* g, double** dist, int** next)
 {
   // get the shortest paths using Floyd-Warshall
   for (int i=0; i<g->num_verts; ++i) {
-    dist[i] = new int[g->num_verts];
+    dist[i] = new double[g->num_verts];
     if (next) next[i] = new int[g->num_verts];
     for (int k=0; k<g->num_verts; ++k) {
       dist[i][k] = -1;
@@ -125,9 +130,10 @@ void shortest_paths(graph* g, int** dist, int** next)
   for (int v=0; v<g->num_verts; ++v) {
     int out_degree = out_degree(g, v);
     int* out_vertices = out_vertices(g, v);
+    double* out_weights = out_weights(g, v);
     for (int k=0; k<out_degree; ++k) {
       int u = out_vertices[k];
-      dist[v][u] = 1;
+      dist[v][u] = out_weights[k];
       if (next) next[v][u] = u;
     }
   }
@@ -150,20 +156,22 @@ void shortest_paths(graph* g, int** dist, int** next)
 
 double* centrality_index(graph* g)
 {
-  int** dist = new int*[g->num_verts];
+  double** dist = new double*[g->num_verts];
   int** next = new int*[g->num_verts];
   shortest_paths(g, dist, next);
   // calculate individual measures
   int* betweenness = calc_betweenness(g, dist, next);
-  int* closeness = calc_closeness(g, dist);
+  double* closeness = calc_closeness(g, dist);
+  double* pagerank = calc_pagerank(g, 3, 0.85);
 
   // aggregate measures together to form the final index and normalize
   double* CI = new double[g->num_verts];
   double max = 0.0;
   for (unsigned int i=0; i<g->num_verts; ++i) {
     double b = (double)betweenness[i];
-    double c = (double)closeness[i];
-    double val = (0.5 * b) + (0.5 * c);
+    double c = closeness[i];
+    double p = pagerank[i];
+    double val = b; // (0.5 * b) + (0.5 * c);
     CI[i] = val;
     if (val > max) {
       max = val;
@@ -175,6 +183,7 @@ double* centrality_index(graph* g)
 
   delete [] betweenness;
   delete [] closeness;
+  delete [] pagerank;
   
   for (int i=0; i<g->num_verts; ++i) {
     delete [] dist[i];
@@ -187,7 +196,7 @@ double* centrality_index(graph* g)
 }
 
 
-int* calc_betweenness(graph* g, int** dist, int** next)
+int* calc_betweenness(graph* g, double** dist, int** next)
 {
   double timer = omp_get_wtime();
   
@@ -216,25 +225,125 @@ int* calc_betweenness(graph* g, int** dist, int** next)
 }
 
 
-int* calc_closeness(graph* g, int** dist)
+double* calc_closeness(graph* g, double** dist)
 {
   double timer = omp_get_wtime();
 
-  int* closeness = new int[g->num_verts];
+  double* closeness = new double[g->num_verts];
 
   for (int i=0; i<g->num_verts; ++i) {
-    closeness[i] = 0;
+    closeness[i] = 0.0;
     for (int k=0; k<g->num_verts; ++k) {
       if (dist[i][k] > 0) {
         closeness[i] += dist[i][k];
       }
     }
+    // closeness[i] = 1 / (closeness[i]);
   }
 
   timer = omp_get_wtime() - timer;
   printf("Closeness finished after %.3f seconds\n", timer);
 
   return closeness;
+}
+
+
+#define DELTA 1E-7
+
+double* calc_pagerank(graph* g, unsigned int num_iter, double damping_factor)
+{
+  double* pageranks = new double[g->num_verts];
+  double* pagerank_next = new double[g->num_verts];
+  double sum_sinks = 0.0;
+  double sum_sinks_next = 0.0;
+  
+  double timer = omp_get_wtime();
+  for (int vert = 0; vert < g->num_verts; ++vert) {
+    pageranks[vert] = 1 / (double)g->num_verts;
+    int out_degree = out_degree(g, vert);
+    if (out_degree > 0)
+      pageranks[vert] /= (double)out_degree;
+    else
+    {
+      pageranks[vert] /= (double)g->num_verts;
+      sum_sinks += pageranks[vert];
+    }
+  }
+
+  int* work_queue = new int[g->num_verts];
+  int* queue_next = new int[g->num_verts];
+  int queue_size = g->num_verts;
+  int next_size = 0;
+
+  int num_updates = 0;
+  #pragma omp parallel
+  {
+  #pragma omp for
+  for (int vert = 0; vert < g->num_verts; ++vert)
+    work_queue[vert] = vert;
+
+  for (int iter = 0; iter < num_iter; ++iter) {
+    #pragma omp for reduction(+:num_updates)
+    for (int i = 0; i < queue_size; ++i) {
+      int vert = work_queue[i];
+      double new_pagerank = sum_sinks / (double)g->num_verts;
+
+      int out_degree = out_degree(g, vert);
+      int* out_vertices = out_vertices(g, vert);
+      for (int j = 0; j < out_degree; ++j) 
+        new_pagerank += pageranks[out_vertices[j]];
+
+      new_pagerank *= damping_factor;
+      new_pagerank += ((1.0 - damping_factor) / (double)g->num_verts);
+      out_degree = out_degree(g, vert);
+      if (out_degree > 0)
+        new_pagerank /= (double) out_degree;
+      else {
+        new_pagerank /= g->num_verts;
+        sum_sinks_next += pageranks[vert];
+      }
+
+      if (fabs(new_pagerank - pageranks[vert]) < DELTA ) {
+        ++num_updates;
+        int index = 0;
+        #pragma omp atomic capture
+        index = next_size++;
+        queue_next[index] = vert;
+      }
+      pagerank_next[vert] = new_pagerank;
+    }
+
+    #pragma omp single
+    {
+    double* temp = pageranks;
+    pageranks = pagerank_next;
+    pagerank_next = temp;
+    sum_sinks = sum_sinks_next;
+    sum_sinks_next = 0.0;
+
+    int* temp1 = work_queue;
+    work_queue = queue_next;
+    queue_next = temp1;
+    queue_size = next_size;
+    next_size = 0;
+    num_updates = 0;
+    }
+  } // end iter for
+  } // parallel
+
+  for (int vert = 0; vert < g->num_verts; ++vert)
+  {
+    if (out_degree(g, vert) > 0)
+      pageranks[vert] *= (double)out_degree(g, vert);
+    else
+      pageranks[vert] *= (double)g->num_verts;
+  }
+  timer = omp_get_wtime() - timer;
+  printf("Pagerank finished after %.3f seconds\n", timer);
+
+  delete [] pagerank_next;
+
+  return pageranks;
 }
 
 
