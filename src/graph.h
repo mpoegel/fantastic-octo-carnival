@@ -38,9 +38,10 @@ void create_csr(int num_verts, int num_edges, int* srcs, int* dsts, float* latit
 
 // centrality algorithms
 double* centrality_index(graph* g);
-int* calc_betweenness(graph* g, double** dist, int** next);
+double* calc_betweenness(graph* g, double** dist, int** next);
 double* calc_closeness(graph* g, double** dist);
 double* calc_pagerank(graph* g, unsigned int num_iter, double damping_factor);
+double* calc_eccentricity(graph* g, double** dist);
 
 bool betweenness_comp(int* a, int* b);
 void output_info(graph* g, int* betweenness);

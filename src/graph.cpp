@@ -160,19 +160,24 @@ double* centrality_index(graph* g)
   int** next = new int*[g->num_verts];
   shortest_paths(g, dist, next);
   // calculate individual measures
-  int* betweenness = calc_betweenness(g, dist, next);
+  double* betweenness = calc_betweenness(g, dist, next);
   double* closeness = calc_closeness(g, dist);
-  double* pagerank = calc_pagerank(g, 3, 0.85);
+  double* pagerank = calc_pagerank(g, 20, 0.85);
+  double* eccentricity = calc_eccentricity(g, dist);
 
   // aggregate measures together to form the final index and normalize
   double* CI = new double[g->num_verts];
   double max = 0.0;
   for (unsigned int i=0; i<g->num_verts; ++i) {
-    double b = (double)betweenness[i];
+    double b = betweenness[i];
     double c = closeness[i];
     double p = pagerank[i];
-    double val = b; // (0.5 * b) + (0.5 * c);
+    double e = eccentricity[i];
+    double val = b; // (0.5 * b) + (0.5 * e);
     CI[i] = val;
+    if (isnan(val)) {
+      printf("nope nope nope!\n");
+    }
     if (val > max) {
       max = val;
     }
@@ -184,6 +189,7 @@ double* centrality_index(graph* g)
   delete [] betweenness;
   delete [] closeness;
   delete [] pagerank;
+  delete [] eccentricity;
   
   for (int i=0; i<g->num_verts; ++i) {
     delete [] dist[i];
@@ -196,14 +202,14 @@ double* centrality_index(graph* g)
 }
 
 
-int* calc_betweenness(graph* g, double** dist, int** next)
+double* calc_betweenness(graph* g, double** dist, int** next)
 {
   double timer = omp_get_wtime();
   
-  int* betweenness = new int[g->num_verts];
+  double* betweenness = new double[g->num_verts];
   // count the shortest paths that go through each vertex
   for (int i=0; i<g->num_verts; ++i) {
-    betweenness[i] = 0;
+    betweenness[i] = 0.0;
   }
   for (int u=0; u<g->num_verts; ++u) {
     for (int v=u+1; v<g->num_verts; ++v) {
@@ -216,6 +222,16 @@ int* calc_betweenness(graph* g, double** dist, int** next)
         betweenness[s]++;
       }
     }
+  }
+
+  double max_b = 0;
+  for (int i=0; i<g->num_verts; ++i) {
+    if (betweenness[i] > max_b) {
+      max_b = betweenness[i];
+    }
+  }
+  for (int i=0; i<g->num_verts; ++i) {
+    betweenness[i] /= max_b;
   }
 
   timer = omp_get_wtime() - timer;
@@ -238,7 +254,7 @@ double* calc_closeness(graph* g, double** dist)
         closeness[i] += dist[i][k];
       }
     }
-    // closeness[i] = 1 / (closeness[i]);
+    closeness[i] = 1.0 / closeness[i];
   }
 
   timer = omp_get_wtime() - timer;
@@ -344,6 +360,43 @@ double* calc_pagerank(graph* g, unsigned int num_iter, double damping_factor)
   delete [] pagerank_next;
 
   return pageranks;
+}
+
+
+double* calc_eccentricity(graph* g, double** dist)
+{
+  double timer = omp_get_wtime();
+
+  double* eccentricity = new double[g->num_verts];
+
+  for (int i=0; i<g->num_verts; ++i) {
+    double max_dist = 0.0;
+    for (int k=0; k<g->num_verts; ++k) {
+      if (dist[i][k] > max_dist) {
+        max_dist = dist[i][k];
+      }
+    }
+    if (max_dist > 0) {
+      eccentricity[i] = 1.0 / max_dist;
+    } else {
+      eccentricity[i] = 0.0;
+    }
+  }
+
+  double max_e;
+  for (int i=0; i<g->num_verts; ++i) {
+    if (eccentricity[i] > max_e) {
+      max_e = eccentricity[i];
+    }
+  }
+  for (int i=0; i<g->num_verts; ++i) {
+    eccentricity[i] /= max_e;
+  }
+
+  timer = omp_get_wtime() - timer;
+  printf("Eccentricity finished after %.3f seconds\n", timer);
+
+  return eccentricity;
 }
 
 
