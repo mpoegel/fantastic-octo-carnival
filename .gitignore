@@ -5,8 +5,15 @@ data/raw
 # reports
 **/*.pdf
 
+# output
+output
+
 # binary files
 bin
 
 # todos
 todo.md
+
+# R files
+.RData
+.Rhistory

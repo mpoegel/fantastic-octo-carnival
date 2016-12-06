@@ -1,6 +1,8 @@
 #include <algorithm>
 #include <cstdlib>
+#include <fstream>
 #include <iostream>
+#include <cmath>
 
 #include "graph.h"
 #include "utils.h"
@@ -125,12 +127,33 @@ void calculate_error(graph* g, int* y_hat, float** latlong, int num_cities)
 }
 
 
+void save_results(char* filename, graph* g, int* y_hat, int num_cities)
+{
+  ofstream fs(filename);
+  if (!fs.is_open()) {
+    fprintf(stderr, "Error: could not open output file %s\n", filename);
+    return;
+  }
+  fs << "id,lat,lon" << endl;
+  float epsilon = 0.001;
+  for (unsigned int i=0; i<num_cities; ++i) {
+    int v = y_hat[i];
+    if (abs(g->latitudes[v]) < epsilon || abs(g->longitudes[v]) < epsilon) {
+      continue;
+    }
+    fs << i << "," << g->latitudes[v] << "," << g->longitudes[v] << endl;
+  }
+  
+  fs.close();
+}
+
+
 int main(int argc, char* argv[])
 {
 
   if (argc < 6) {
     fprintf(stderr, "Usage: %s <input_graph> <latlong_graph> <pop_file> <latlong_file>"
-            "<cities_file>\n", argv[0]);
+            "<cities_file> [output_file]\n", argv[0]);
     exit(EXIT_FAILURE);
   }
 
@@ -163,6 +186,10 @@ int main(int argc, char* argv[])
   int* y_hat = match_by_population(&g, CI, populations, num_cities);
 
   calculate_error(&g, y_hat, latlong, num_cities);
+
+  if (argc >= 7) {
+    save_results(argv[6], &g, y_hat, num_cities);
+  }
 
   delete [] srcs;
   delete [] dsts;
