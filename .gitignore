@@ -17,3 +17,6 @@ todo.md
 # R files
 .RData
 .Rhistory
+
+# lib directory
+lib

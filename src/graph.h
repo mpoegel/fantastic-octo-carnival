@@ -11,6 +11,8 @@
 #include <sstream>
 #include <string>
 
+#include <Eigen/Dense>
+
 #include "utils.h"
 
 using namespace std;
