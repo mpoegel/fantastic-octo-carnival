@@ -14,10 +14,10 @@ void read_edge(char* filename, int &num_verts, int &num_edges, int* &srcs, int* 
   istringstream iss(line);
   string tmp;
   iss >> tmp;
+  iss >> tmp;
   num_verts = atoi(tmp.c_str());
   iss >> tmp;
   num_edges = atoi(tmp.c_str());
-  iss >> tmp;
 
   int src, dst;
   int counter = 0;
@@ -27,9 +27,9 @@ void read_edge(char* filename, int &num_verts, int &num_edges, int* &srcs, int* 
   dsts = new int[num_edges];
   for (unsigned int i=0; i<num_edges / 2; i++) {
     getline(infile, line, ' ');
-    src = atoi(line.c_str());
+    src = atoi(line.c_str()) - 1;
     getline(infile, line);
-    dst = atoi(line.c_str());
+    dst = atoi(line.c_str()) - 1;
 
     srcs[counter] = src;
     dsts[counter] = dst;
@@ -77,7 +77,8 @@ void read_vert_latlong(char* filename, float* &latitudes, float* &longitudes)
 
 
 void create_csr(int num_verts, int num_edges, int* srcs, int* dsts, float* latitudes, 
-                float* longitudes, int* &out_array, double* &out_weights, int* &out_degree_list)
+                float* longitudes, int* &out_array, double* &out_weights, int* &out_degree_list,
+                int& max_degree)
 {
   out_array = new int[num_edges];
   out_weights = new double[num_edges];
@@ -108,6 +109,51 @@ void create_csr(int num_verts, int num_edges, int* srcs, int* dsts, float* latit
                                   longitudes[dsts[i]]);
     out_weights[temp_counts[srcs[i]]++] = w;
   }
+
+  max_degree = 0;
+  for (int i=0; i<num_verts; ++i) {
+    if (out_degree_list[i+1] - out_degree_list[i] > max_degree) {
+      max_degree = out_degree_list[i+1] - out_degree_list[i];
+    }
+  }
+  
+  
+  delete [] temp_counts;
+}
+
+
+void create_csr_with_weights(int num_verts, int num_edges, int* srcs, int* dsts, double* wgts,
+                             int*& out_array, int*& out_degree_list, double*& out_weights,
+                             int& max_degree)
+{
+  out_array = new int[num_edges];
+  out_weights = new double[num_edges];
+  out_degree_list = new int[num_verts+1];
+
+  for (int i = 0; i < num_edges; ++i)
+    out_array[i] = 0;
+  for (int i = 0; i < num_edges; ++i)
+    out_weights[i] = 0;
+  for (int i = 0; i < num_verts+1; ++i)
+    out_degree_list[i] = 0;
+
+  int* temp_counts = new int[num_verts];
+  for (int i = 0; i < num_verts; ++i)
+    temp_counts[i] = 0;
+  for (int i = 0; i < num_edges; ++i)
+    ++temp_counts[srcs[i]];
+  for (int i = 0; i < num_verts; ++i)
+    out_degree_list[i+1] = out_degree_list[i] + temp_counts[i];
+  copy(out_degree_list, out_degree_list + num_verts, temp_counts);
+  for (int i = 0; i < num_edges; ++i) {
+    out_array[temp_counts[srcs[i]]] = dsts[i];
+    out_weights[temp_counts[srcs[i]]++] = wgts[i];
+  }
+
+  max_degree = 0;
+  for (int i = 0; i < num_verts; ++i)
+    if (out_degree_list[i+1] - out_degree_list[i] > max_degree)
+      max_degree = out_degree_list[i+1] - out_degree_list[i];
   
   delete [] temp_counts;
 }
@@ -175,9 +221,6 @@ double* centrality_index(graph* g)
     double e = eccentricity[i];
     double val = b; // (0.5 * b) + (0.5 * e);
     CI[i] = val;
-    if (isnan(val)) {
-      printf("nope nope nope!\n");
-    }
     if (val > max) {
       max = val;
     }
@@ -400,6 +443,216 @@ double* calc_eccentricity(graph* g, double** dist)
 }
 
 
+int* label_prop(graph* g, int num_iter)
+{
+  double timer = omp_get_wtime();
+  
+  srand(time(0));
+
+  int* labels = new int[g->num_verts];
+  int* labels_next = new int[g->num_verts];
+  for (int i=0; i<g->num_verts; ++i) {
+    labels[i] = i;
+  }
+ 
+  #pragma omp parallel 
+  {
+  unordered_map<int, int> label_counts;
+  int* max_labels = new int[g->max_degree];
+  int max_count = 0;
+  int max_label = 0;
+
+  for (int i=0; i<num_iter; i++) {
+    #pragma omp for schedule(guided)
+    for (int vert=0; vert<g->num_verts; vert++) {
+      label_counts.clear();
+      max_count = 0;
+      max_label = 0;
+
+      int out_degree = out_degree(g, vert);
+      int* out_vertices = out_vertices(g, vert);
+      for (int j=0; j<out_degree; j++) {
+        int out = out_vertices[j];
+        int out_label = labels[out];
+        if (label_counts.count(out_label) == 0) {
+          label_counts[out_label] = 1;
+        } else {
+          label_counts[out_label]++;
+        }
+        if (label_counts[out_label] > max_label) {
+          max_labels[0] = out_label;
+          max_count = 1;
+          max_label = label_counts[out_label];
+        } else if (label_counts[out_label] == max_label) {
+          max_labels[max_count++] = out_label;
+        }
+      }
+
+      // update the label of the current vertex
+      if (max_count == 1) {
+        labels_next[vert] = max_labels[0];
+      } else if (max_count > 1) {
+        labels_next[vert] = max_labels[rand() % max_count];
+      } else {
+        labels_next[vert] = labels[vert];
+      }
+
+    }
+
+    #pragma omp barrier    
+    #pragma omp single
+    {
+      int* tmp = labels_next;
+      labels_next = labels;
+      labels = tmp;
+    }
+    #pragma omp barrier
+
+  }
+  delete [] max_labels;
+
+  } // END PARALLEL BLOCK
+
+  delete [] labels_next;
+
+  timer = omp_get_wtime() - timer;
+  printf("Label Propagation finished after %.3f seconds\n", timer);
+  
+  return labels;
+}
+
+
+void coarsen_graph(graph* g, int* comm_assignments, int &num_comms, int &num_intercomm_edges,
+                   int* &coarse_srcs, int* &coarse_dsts, double* &coarse_wgts, float* &coarse_lats,
+                   float* &coarse_longs)
+{
+  double timer = omp_get_wtime();
+
+  // relabel the community numbers
+  num_comms = 0;
+  for (int i=0; i<g->num_verts; ++i) {
+    bool marked = false;
+    for (int k=0; k<g->num_verts; ++k) {
+      if (comm_assignments[k] == i) {
+        comm_assignments[k] = num_comms;
+        marked = true;
+      }
+    }
+    if (marked) {
+      ++num_comms;
+    }
+  }
+ 
+  // calculate coarse edges and their weights
+  // also calculate the new lat/long centers
+  int** new_edges = new int*[num_comms];
+  float** latlong_sums = new float*[num_comms]; 
+  for (int i=0; i<num_comms; ++i) {
+    new_edges[i] = new int[num_comms];
+    latlong_sums[i] = new float[3];
+    for (int k=0; k<num_comms; ++k) {
+      new_edges[i][k] = -1;
+    }
+    for (int k=0; k<3; ++k) {
+      latlong_sums[i][k] = 0;
+    }
+  }
+
+  for (int v=0; v<g->num_verts; ++v) {
+    int c = comm_assignments[v];
+    latlong_sums[c][0]++;
+    latlong_sums[c][1] += g->latitudes[v];
+    latlong_sums[c][2] += g->longitudes[v];
+  }
+
+  coarse_lats = new float[num_comms];
+  coarse_longs = new float[num_comms];
+  for (int i=0; i<num_comms; ++i) {
+    coarse_lats[i] = latlong_sums[i][1] / (float)latlong_sums[i][0];
+    coarse_longs[i] = latlong_sums[i][2] / (float)latlong_sums[i][0];
+    delete [] latlong_sums[i];
+  }
+  delete [] latlong_sums;
+
+  num_intercomm_edges = 0;
+  for (int v=0; v<g->num_verts; ++v) {
+    int out_degree = out_degree(g, v);
+    int* out_vertices = out_vertices(g, v);
+    double* out_weights = out_weights(g, v);
+    for (int i=0; i<out_degree; i++) {
+      int u = out_vertices[i];
+      int vcomm = comm_assignments[v];
+      int ucomm = comm_assignments[u];
+      if (vcomm == ucomm) {
+        continue;
+      }
+      if (new_edges[vcomm][ucomm] == -1) {
+        ++num_intercomm_edges;
+        new_edges[vcomm][ucomm] = out_weights[i];
+      } else {
+        new_edges[vcomm][ucomm] += out_weights[i];
+      }
+    }
+  }
+
+  coarse_srcs = new int[num_intercomm_edges];
+  coarse_dsts = new int[num_intercomm_edges];
+  coarse_wgts = new double[num_intercomm_edges];
+  int e = 0;
+  for (int i=0; i<num_comms; ++i) {
+    for (int k=i+1; k<num_comms; ++k) {
+      if (new_edges[i][k] != -1) {
+        coarse_wgts[e] = new_edges[i][k];
+        coarse_wgts[e + 1] = new_edges[i][k];
+        coarse_srcs[e] = i;
+        coarse_dsts[e++] = k;
+        coarse_srcs[e] = k;
+        coarse_dsts[e++] = i;
+      }
+    }
+  }
+
+  for (int i=0; i<num_comms; ++i) {
+    delete [] new_edges[i];
+  }
+  delete [] new_edges;
+
+  timer = omp_get_wtime() - timer;
+  printf("Coarsened graph has %d edges between %d communities after %.3f seconds\n",
+         num_intercomm_edges, num_comms, timer);
+
+}
+
+
+void coarsen(graph* g, graph* coarse_g, int* &labels)
+{
+  // community detection and graph clustering
+  labels = label_prop(g, 500);
+  // Coarsen the graph
+  int num_comms;
+  int num_intercomm_edges;
+  int* coarse_srcs; 
+  int* coarse_dsts;
+  double* coarse_wgts;
+  float* coarse_lats;
+  float* coarse_longs;
+  coarsen_graph(g, labels, num_comms, num_intercomm_edges, coarse_srcs, coarse_dsts, coarse_wgts,
+                coarse_lats, coarse_longs);
+  // We can now create the coarsened graph
+  int* coarse_out_array;
+  int* coarse_out_degree_list;
+  double* coarse_out_weights;
+  int coarse_max_degree;
+  create_csr_with_weights(num_comms, num_intercomm_edges, coarse_srcs, coarse_dsts, coarse_wgts,
+             coarse_out_array, coarse_out_degree_list, coarse_out_weights, coarse_max_degree);
+  *coarse_g = {num_comms, num_intercomm_edges, coarse_out_array, coarse_out_degree_list,
+                    coarse_lats, coarse_longs, coarse_out_weights, coarse_max_degree};
+  delete [] coarse_srcs;
+  delete [] coarse_dsts;
+  delete [] coarse_wgts;
+}
+
+
 bool betweenness_comp(int* a, int* b)
 {
   return a[1] > b[1];
@@ -436,7 +689,7 @@ int* match_by_population(graph* g, double* CI, int* populations, int num_cities)
   int* y_hat = new int[num_cities];
   for (unsigned int i=0; i<num_cities; ++i) {
     norm_pops[i] = (double)populations[i] / (double)max;
-    double min_dist = INT_MAX;
+    double min_dist = DBL_MAX;
     double d;
     unsigned int min_v = -1;
     if (norm_pops[i] > 0) {

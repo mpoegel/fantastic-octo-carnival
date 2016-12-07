@@ -192,15 +192,25 @@ int main(int argc, char* argv[])
   int* out_degree_list;
   float* latitudes;
   float* longitudes;
+  int max_degree;
 
   read_edge(graph_file, num_verts, num_edges, srcs, dsts);
   read_vert_latlong(latlong_graph_file, latitudes, longitudes);
   create_csr(num_verts, num_edges, srcs, dsts, latitudes, longitudes, out_array, out_weights,
-             out_degree_list);
-  graph g = {num_verts, num_edges, out_array, out_degree_list, latitudes, longitudes, out_weights};
+             out_degree_list, max_degree);
+  graph g = {num_verts, num_edges, out_array, out_degree_list, latitudes, longitudes, out_weights,
+             max_degree};
+  double* CI;
+  int* y_hat;
 
-  double* CI = centrality_index(&g);
-  int* y_hat = match_by_population(&g, CI, populations, num_cities);
+  /*
+   * Run analysis on the graph as it is
+   */
+  printf("**** analysis on standard graph ****\n");
+   
+
+  CI = centrality_index(&g);
+  y_hat = match_by_population(&g, CI, populations, num_cities);
 
   calculate_error(&g, y_hat, latlong, num_cities);
 
@@ -212,14 +222,45 @@ int main(int argc, char* argv[])
     save_CI(ci_filename, &g, CI);
   }
 
+  delete[] CI;
+  delete[] y_hat;
+
+  /*
+   * Run analysis on coarsened graph
+   */
+  printf("\n**** analysis on coarsened graph ****\n");
+  
+  int* labels;
+  graph coarse_g;
+  coarsen(&g, &coarse_g, labels);
+  
+  CI = centrality_index(&coarse_g);
+  y_hat = match_by_population(&coarse_g, CI, populations, num_cities);
+
+  calculate_error(&coarse_g, y_hat, latlong, num_cities);
+
+  if (argc >= 7) {
+    string base_filename = string(argv[6]);
+    const char* yhat_filename = string(base_filename + ".coarse.yhat").c_str();
+    save_yhat(yhat_filename, &coarse_g, y_hat, num_cities);
+    const char* ci_filename = string(base_filename + ".coarse.ci").c_str();    
+    save_CI(ci_filename, &coarse_g, CI);
+  }
+
+  delete [] labels;
+  delete [] CI;
+  delete [] y_hat;
+
+  /*
+   * Cleanup
+   */
+
   delete [] srcs;
   delete [] dsts;
   delete [] out_array;
   delete [] out_degree_list;
   delete [] latitudes;
   delete [] longitudes;
-  delete [] CI;
-  delete [] y_hat;
 
   delete [] populations;
   for (unsigned int i=0; i<num_cities; ++i) {
