@@ -222,7 +222,7 @@ int main(int argc, char* argv[])
   /*
    * Run analysis on the graph as it is
    */
-  // printf("**** analysis on standard graph ****\n");
+  printf("**** analysis on raw graph ****\n");
 
   CI = centrality_index(&g);
   y_hat = match_by_population(CI, g.num_verts, populations, num_cities);
@@ -283,7 +283,7 @@ int main(int argc, char* argv[])
   double max_ci = 0;
   for (unsigned int i=0; i<num_clusters; ++i) if (cluster_CI[i] > max_ci) max_ci = cluster_CI[i];
   for (unsigned int i=0; i<num_clusters; ++i) cluster_CI[i] /= max_ci;
-  y_hat = match_by_population_unique(cluster_CI, num_clusters, populations, num_cities);
+  y_hat = match_by_population(cluster_CI, num_clusters, populations, num_cities);
   float* cluster_lat = average_by_cluster(clusters, num_clusters, coarse_g.latitudes,
                                           coarse_g.num_verts);
   float* cluster_lon = average_by_cluster(clusters, num_clusters, coarse_g.longitudes,
