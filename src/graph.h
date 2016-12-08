@@ -11,11 +11,17 @@
 #include <sstream>
 #include <string>
 
-#include <Eigen/Dense>
+#include <Eigen/Core>
+#include <Eigen/Sparse>
+
+#include <SymEigsSolver.h>
+#include <MatOp/SparseSymMatProd.h>
 
 #include "utils.h"
 
 using namespace std;
+using namespace Eigen;
+using namespace Spectra;
 
 
 #define out_degree(g, n) (g->out_degree_list[n+1] - g->out_degree_list[n])
@@ -57,6 +63,8 @@ void coarsen_graph(graph* g, int* comm_assignments, int &num_comms, int &num_int
                    int* &coarse_srcs, int* &coarse_dsts, double* &coarse_wgts, float* &coarse_lats,
                    float* &coarse_longs);
 void coarsen(graph* g, graph* coarse_g, int* &labels);
+
+void exponential_diffusion_kernel(graph* g, MatrixXd &K, double damping_factor);
 
 bool betweenness_comp(int* a, int* b);
 void output_info(graph* g, int* betweenness);

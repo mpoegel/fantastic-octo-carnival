@@ -207,7 +207,6 @@ int main(int argc, char* argv[])
    * Run analysis on the graph as it is
    */
   printf("**** analysis on standard graph ****\n");
-   
 
   CI = centrality_index(&g);
   y_hat = match_by_population(&g, CI, populations, num_cities);
@@ -250,6 +249,17 @@ int main(int argc, char* argv[])
   delete [] labels;
   delete [] CI;
   delete [] y_hat;
+
+
+  /*
+   * Graph kernel methods
+   */
+  printf("\n**** analysis using kernel-based methods ****\n");   
+
+   MatrixXd K(g.num_verts, g.num_verts);
+   double beta = 1.0; 
+   exponential_diffusion_kernel(&coarse_g, K, beta);
+
 
   /*
    * Cleanup

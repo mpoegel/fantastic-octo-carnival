@@ -1,6 +1,5 @@
 #include "graph.h"
 
-
 void read_edge(char* filename, int &num_verts, int &num_edges, int* &srcs, int* &dsts)
 {
   ifstream infile;
@@ -651,6 +650,49 @@ void coarsen(graph* g, graph* coarse_g, int* &labels)
   delete [] coarse_dsts;
   delete [] coarse_wgts;
 }
+
+
+void exponential_diffusion_kernel(graph* g, MatrixXd &K, double damping_factor)
+{  
+  // Calculate the Laplacian (adjaceny matrix - degree matrix) 
+  typedef Triplet<double> T;
+  vector<T> tripletList;
+  tripletList.reserve(g->num_edges);
+  for (unsigned int v=0; v<g->num_verts; ++v) {
+    int out_degree = out_degree(g, v);
+    int* out_vertices = out_vertices(g, v);
+    for (unsigned int i=0; i<out_degree; ++i) {
+      if (v != out_vertices[i]) {
+        tripletList.push_back(T(v, out_vertices[i], -1));
+      }
+    }
+    tripletList.push_back(T(v, v, out_degree(g, v)));
+  }
+
+  SparseMatrix<double> S(g->num_verts, g->num_verts);
+  S.setFromTriplets(tripletList.begin(), tripletList.end());
+
+  // Construct matrix operation object using the wrapper class
+  SparseSymMatProd<double> op(S);
+  int nev = g->num_verts - 1;
+  int nvc = g->num_verts;
+  // Compute the entire eigendecomposition
+  SymEigsSolver< double, LARGEST_ALGE, SparseSymMatProd<double> > eigs(&op, nev, nvc);
+  eigs.init();
+  eigs.compute();
+  if (eigs.info() != SUCCESSFUL) {
+    fprintf(stderr, "Eigendecomposition failed!");
+    return;
+  }
+  VectorXd L = eigs.eigenvalues();
+  MatrixXd U = eigs.eigenvectors();
+
+  for (unsigned int i=0; i<L.rows(); ++i) {
+    L[i] = exp(damping_factor * L[i]);
+  }
+  K = U * L.asDiagonal() * U.transpose();
+}
+
 
 
 bool betweenness_comp(int* a, int* b)
