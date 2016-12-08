@@ -65,10 +65,37 @@ void coarsen_graph(graph* g, int* comm_assignments, int &num_comms, int &num_int
 void coarsen(graph* g, graph* coarse_g, int* &labels);
 
 void exponential_diffusion_kernel(graph* g, MatrixXd &K, double damping_factor);
+int* kernel_kmeans(const MatrixXd &K, unsigned int k, double epsilon);
 
 bool betweenness_comp(int* a, int* b);
 void output_info(graph* g, int* betweenness);
 
-int* match_by_population(graph* g, double* CI, int* populations, int num_cities);
+int* match_by_population(double* CI, unsigned int k, int* populations, int num_cities);
+int* match_by_population_unique(double* CI, unsigned int k, int* populations, int num_cities);
+
+template<typename T>
+T* average_by_cluster(int* clusters, unsigned int k, T* data, unsigned int n)
+{
+  // calculate the average CI of each cluster
+  T* avg_data = new T[k];
+  int* cluster_counts = new int[k];
+  for (unsigned int i=0; i<k; ++i) {
+    avg_data[i] = 0.0;
+    cluster_counts[i] = 0;
+  }
+  for (unsigned int j=0; j<n; ++j) {
+    int c = clusters[j];
+    avg_data[c] += data[j];
+    cluster_counts[c]++;
+  }
+  for (unsigned int i=0; i<k; ++i) {
+    if (cluster_counts[i] == 0) {
+      avg_data[i] = -1;
+    } else {
+      avg_data[i] /= cluster_counts[i];
+    }
+  }
+  return avg_data;
+}
 
 #endif

@@ -83,7 +83,6 @@ p4
 
 # COARSENED: Plot the centrality index
 mn.ci <- read.csv("output/minnesota.coarse.ci")
-colors <- pal(length(mn.ci))
 
 p5 <- ggplot() +
   geom_map(data = mi.map.data, map = state.map.data,
@@ -93,3 +92,43 @@ p5 <- ggplot() +
   ggtitle("Minnesota - Centrality Index (Coarsened)") +
   mapTheme()
 p5
+
+# GRAPH KERNEL: Plot the clusters
+mn.clusters <- read.csv("output/minnesota.coarse.clusters")
+mn.clusters$cluster <- as.factor(mn.clusters$cluster)
+
+p6 <- ggplot() +
+  geom_map(data = mi.map.data, map = state.map.data,
+           aes(x=long, y=lat, map_id=region), fill = light.gray, color = dark.gray) +
+  geom_point(data = mn.clusters, stat = "identity", aes(x = lon, y = lat, color = cluster)) +
+  scale_color_manual(values = rainbow(length(levels(mn.clusters$cluster)))) +
+  ggtitle("Minnesota - Clusters (Coarsened)") +
+  mapTheme()
+p6
+
+# GRAPH KERNEL: Plot the ground truth against the output
+mn.estimates <- read.csv("output/minnesota.coarse.clusters.yhat")
+
+# png("output/mn_ground_truth_vs_estimates.png")
+p7 <- ggplot() +
+  geom_map(data = mn.map.data, map = state.map.data,
+           aes(x=long, y=lat, map_id=region), fill = light.gray, color = dark.gray) +
+  geom_text(data = mn.ground.truth, aes(x = lon, y = lat, label = id), size = 3, color = "blue") +
+  geom_text(data = mn.estimates, aes(x = lon, y = lat, label = id), size = 3, color = "red") +
+  ggtitle("Minnesota - Ground Truth v. Estimate (K-means)") +
+  mapTheme()
+p7
+# dev.off()
+
+# GRAPH KERNEL: Plot the centrality index
+mn.ci <- read.csv("output/minnesota.coarse.clusters.ci")
+
+p8 <- ggplot() +
+  geom_map(data = mi.map.data, map = state.map.data,
+           aes(x=long, y=lat, map_id=region), fill = light.gray, color = dark.gray) +
+  geom_point(data = mn.ci, stat = "identity", aes(x = lon, y = lat, color = CI)) +
+  scale_colour_gradient(limits=c(min(mn.ci$CI), max(mn.ci$CI)), high="red") +
+  ggtitle("Minnesota - Centrality Index (K-means)") +
+  mapTheme()
+p8
+

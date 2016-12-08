@@ -89,7 +89,7 @@ string* read_cities(char* filename)
 }
 
 
-void calculate_error(graph* g, int* y_hat, float** latlong, int num_cities)
+void calculate_error(float* g_lat, float* g_lon, int* y_hat, float** latlong, int num_cities)
 {
   double* dists = new double[num_cities];
   double total_dist = 0.0;
@@ -97,7 +97,7 @@ void calculate_error(graph* g, int* y_hat, float** latlong, int num_cities)
   for (unsigned int i=0; i<num_cities; ++i) {
     int v = y_hat[i];
     if (v > 0) {
-      double d = measureLatLongDist(g->latitudes[v], g->longitudes[v], latlong[i][0],
+      double d = measureLatLongDist(g_lat[v], g_lon[v], latlong[i][0],
                                     latlong[i][1]);
       dists[i] = d;
       total_dist += d;
@@ -128,7 +128,7 @@ void calculate_error(graph* g, int* y_hat, float** latlong, int num_cities)
 }
 
 
-void save_yhat(const char* filename, graph* g, int* y_hat, int num_cities)
+void save_yhat(const char* filename, float* g_lats, float* g_lons, int* y_hat, int num_cities)
 {
   FILE* fp = fopen(filename, "w");
   if (fp == NULL) {
@@ -139,16 +139,16 @@ void save_yhat(const char* filename, graph* g, int* y_hat, int num_cities)
   float epsilon = 0.001;
   for (unsigned int i=0; i<num_cities; ++i) {
     int v = y_hat[i];
-    if (abs(g->latitudes[v]) < epsilon || abs(g->longitudes[v]) < epsilon) {
+    if (abs(g_lats[v]) < epsilon || abs(g_lons[v]) < epsilon) {
       continue;
     }
-    fprintf(fp, "%d,%f,%f\n", i, g->latitudes[v], g->longitudes[v]);
+    fprintf(fp, "%d,%f,%f\n", i, g_lats[v], g_lons[v]);
   }
   fclose(fp);
 }
 
 
-void save_CI(const char* filename, graph* g, double* CI)
+void save_CI(const char* filename, float* g_lats, float* g_lons, unsigned int N, double* CI)
 {
   FILE* fp = fopen(filename, "w");
   if (fp == NULL) {
@@ -156,8 +156,24 @@ void save_CI(const char* filename, graph* g, double* CI)
     return;
   }
   fprintf(fp, "id,lat,lon,CI\n");
+  for (unsigned int v=0; v<N; ++v) {
+    if (CI[v] > 0) {
+      fprintf(fp, "%d,%f,%f,%f\n", v, g_lats[v], g_lons[v], CI[v]);
+    } 
+  }
+  fclose(fp);
+}
+
+void save_clusters(const char* filename, graph* g, int* clusters)
+{
+  FILE* fp = fopen(filename, "w");
+  if (fp == NULL) {
+    fprintf(stderr, "Error: could not open output file %s\n", filename);
+    return;
+  }
+  fprintf(fp, "id,lat,lon,cluster\n");
   for (unsigned int v=0; v<g->num_verts; ++v) {
-    fprintf(fp, "%d,%f,%f,%f\n", v, g->latitudes[v], g->longitudes[v], CI[v]);
+    fprintf(fp, "%d,%f,%f,%d\n", v, g->latitudes[v], g->longitudes[v], clusters[v]);
   }
   fclose(fp);
 }
@@ -206,19 +222,19 @@ int main(int argc, char* argv[])
   /*
    * Run analysis on the graph as it is
    */
-  printf("**** analysis on standard graph ****\n");
+  // printf("**** analysis on standard graph ****\n");
 
   CI = centrality_index(&g);
-  y_hat = match_by_population(&g, CI, populations, num_cities);
+  y_hat = match_by_population(CI, g.num_verts, populations, num_cities);
 
-  calculate_error(&g, y_hat, latlong, num_cities);
+  calculate_error(g.latitudes, g.longitudes, y_hat, latlong, num_cities);
 
   if (argc >= 7) {
     string base_filename = string(argv[6]);
     const char* yhat_filename = string(base_filename + ".yhat").c_str();
-    save_yhat(yhat_filename, &g, y_hat, num_cities);
+    save_yhat(yhat_filename, g.latitudes, g.longitudes, y_hat, num_cities);
     const char* ci_filename = string(base_filename + ".ci").c_str();    
-    save_CI(ci_filename, &g, CI);
+    save_CI(ci_filename, g.latitudes, g.longitudes, g.num_verts, CI);
   }
 
   delete[] CI;
@@ -234,16 +250,17 @@ int main(int argc, char* argv[])
   coarsen(&g, &coarse_g, labels);
   
   CI = centrality_index(&coarse_g);
-  y_hat = match_by_population(&coarse_g, CI, populations, num_cities);
 
-  calculate_error(&coarse_g, y_hat, latlong, num_cities);
+  y_hat = match_by_population(CI, g.num_verts, populations, num_cities);
+
+  calculate_error(coarse_g.latitudes, coarse_g.longitudes, y_hat, latlong, num_cities);
 
   if (argc >= 7) {
     string base_filename = string(argv[6]);
     const char* yhat_filename = string(base_filename + ".coarse.yhat").c_str();
-    save_yhat(yhat_filename, &coarse_g, y_hat, num_cities);
+    save_yhat(yhat_filename, coarse_g.latitudes, coarse_g.longitudes, y_hat, num_cities);
     const char* ci_filename = string(base_filename + ".coarse.ci").c_str();    
-    save_CI(ci_filename, &coarse_g, CI);
+    save_CI(ci_filename, coarse_g.latitudes, coarse_g.longitudes, coarse_g.num_verts, CI);
   }
 
   delete [] labels;
@@ -256,10 +273,34 @@ int main(int argc, char* argv[])
    */
   printf("\n**** analysis using kernel-based methods ****\n");   
 
-   MatrixXd K(g.num_verts, g.num_verts);
-   double beta = 1.0; 
-   exponential_diffusion_kernel(&coarse_g, K, beta);
+  MatrixXd K(g.num_verts, g.num_verts);
+  double beta = 1.0; 
+  exponential_diffusion_kernel(&coarse_g, K, beta);
+  unsigned int num_clusters = num_cities;
+  int* clusters = kernel_kmeans(K, num_clusters, 0.1);
 
+  double* cluster_CI = average_by_cluster(clusters, num_clusters, CI, coarse_g.num_verts);
+  double max_ci = 0;
+  for (unsigned int i=0; i<num_clusters; ++i) if (cluster_CI[i] > max_ci) max_ci = cluster_CI[i];
+  for (unsigned int i=0; i<num_clusters; ++i) cluster_CI[i] /= max_ci;
+  y_hat = match_by_population_unique(cluster_CI, num_clusters, populations, num_cities);
+  float* cluster_lat = average_by_cluster(clusters, num_clusters, coarse_g.latitudes,
+                                          coarse_g.num_verts);
+  float* cluster_lon = average_by_cluster(clusters, num_clusters, coarse_g.longitudes,
+                                          coarse_g.num_verts);
+  calculate_error(cluster_lat, cluster_lon, y_hat, latlong, num_cities);
+
+  if (argc >= 7) {
+    string base_filename = string(argv[6]);
+    const char* yhat_filename = string(base_filename + ".coarse.clusters.yhat").c_str();
+    save_yhat(yhat_filename, cluster_lat, cluster_lon, y_hat, num_cities);
+    const char* cluster_filename = string(base_filename + ".coarse.clusters").c_str();
+    save_clusters(cluster_filename, &coarse_g, clusters);
+    const char* ci_filename = string(base_filename + ".coarse.clusters.ci").c_str();
+    save_CI(ci_filename, cluster_lat, cluster_lon, num_clusters, cluster_CI);
+  }
+
+  delete[] clusters;
 
   /*
    * Cleanup

@@ -653,7 +653,8 @@ void coarsen(graph* g, graph* coarse_g, int* &labels)
 
 
 void exponential_diffusion_kernel(graph* g, MatrixXd &K, double damping_factor)
-{  
+{
+  double timer = omp_get_wtime();  
   // Calculate the Laplacian (adjaceny matrix - degree matrix) 
   typedef Triplet<double> T;
   vector<T> tripletList;
@@ -691,8 +692,97 @@ void exponential_diffusion_kernel(graph* g, MatrixXd &K, double damping_factor)
     L[i] = exp(damping_factor * L[i]);
   }
   K = U * L.asDiagonal() * U.transpose();
+
+  timer = omp_get_wtime() - timer;
+  printf("Exponential diffusion kernel computed after %.3f seconds\n", timer);
 }
 
+
+int* kernel_kmeans(const MatrixXd &K, unsigned int k, double epsilon)
+{
+  double timer = omp_get_wtime();
+  
+  unsigned int t = 0;
+  // randomly assign starting clusters
+  int* clusters = new int[K.rows()];
+  for (unsigned int i=0; i<K.rows(); ++i) {
+    clusters[i] = rand() % k;
+  }
+  unsigned int num_updates = 0;
+  double* sqnorm = new double[k];
+  int* cluster_counts = new int[k];
+  double** avg_kernel = new double*[K.rows()];
+  for (unsigned int i=0; i<K.rows(); ++i) {
+    avg_kernel[i] = new double[k];
+  }
+  do {
+    ++t;
+    num_updates = 0;
+    for (unsigned int i=0; i<k; ++i) {
+      cluster_counts[i] = 0;
+    }
+    // compute the squared norms of clusters means
+    for (unsigned int a=0; a<K.rows(); ++a) {
+      for (unsigned int b=0; b<K.cols(); ++b) {
+        if (clusters[a] == clusters[b]) {
+          int c = clusters[a];
+          sqnorm[c] += K(a, b);
+          cluster_counts[c]++;
+        }
+      }
+    }
+    for (unsigned int i=0; i<k; ++i) {
+      sqnorm[i] /= (cluster_counts[i] * cluster_counts[i]);
+    }
+    for (unsigned int j=0; j<K.rows(); ++j) {
+      for (unsigned int i=0; i<k; ++i) {
+        avg_kernel[j][i] = 0.0;
+      }
+    }
+    // compute the average kernel value for each point
+    for (unsigned int j=0; j<K.rows(); ++j) {
+      for (unsigned int i=0; i<k; ++i) {
+        for (unsigned int a=0; a<K.rows(); ++a) {
+          if (clusters[a] == i) {
+            avg_kernel[j][i] += K(a, j);
+          }
+        }
+        avg_kernel[j][i] /= cluster_counts[i];
+      }
+    }
+    // find the closest cluster for each point
+    double min_d;
+    int min_c;
+    double d;
+    for (unsigned int j=0; j<K.rows(); ++j) {
+      min_d = DBL_MAX;
+      min_c = -1;
+      for (unsigned int i=0; i<k; ++i) {
+        d = sqnorm[i] - 2 * avg_kernel[j][i];
+        if (d < min_d) {
+          min_d = d;
+          min_c = i;
+        }
+      }
+      if (clusters[j] != min_c) {
+        num_updates++;
+        clusters[j] = min_c;
+      }
+    }
+  } while ((double)num_updates / (double)K.rows() > epsilon);
+
+  delete[] sqnorm;
+  delete[] cluster_counts;
+  for (unsigned int i=0; i<K.rows(); ++i) {
+    delete[] avg_kernel[i];
+  }
+  delete[] avg_kernel;
+
+  timer = omp_get_wtime() - timer;
+  printf("K-means (k=%d) finished after %d iterations in %.3f seconds\n", k, t, timer);
+
+  return clusters;
+}
 
 
 bool betweenness_comp(int* a, int* b)
@@ -717,33 +807,95 @@ void output_info(graph* g, int* betweenness)
 }
 
 
-int* match_by_population(graph* g, double* CI, int* populations, int num_cities)
+int* match_by_population(double* CI, unsigned int k, int* populations, int num_cities)
 {
   // normalize the populations
   double* norm_pops = new double[num_cities];
-  unsigned int max = 0;
+  unsigned int max_pop = 0;
   for (unsigned int i=0; i<num_cities; ++i) {
-    if (populations[i] > 0 && populations[i] > max) {
-      max = populations[i];
+    if (populations[i] > 0 && populations[i] > max_pop) {
+      max_pop = populations[i];
     }
   }
 
   int* y_hat = new int[num_cities];
   for (unsigned int i=0; i<num_cities; ++i) {
-    norm_pops[i] = (double)populations[i] / (double)max;
+    norm_pops[i] = (double)populations[i] / (double)max_pop;
     double min_dist = DBL_MAX;
     double d;
     unsigned int min_v = -1;
     if (norm_pops[i] > 0) {
-      for (unsigned int v=0; v<g->num_verts; ++v) {
-        d = fabs(norm_pops[i] - CI[v]);
-        if (d < min_dist) {
-          min_dist = d;
-          min_v = v;
+      for (unsigned int v=0; v<k; ++v) {
+        if (CI[v] > 0) {
+          d = fabs(norm_pops[i] - CI[v]);
+          if (d < min_dist) {
+            min_dist = d;
+            min_v = v;
+          }
         }
       }
     }
     y_hat[i] = min_v;
+  }
+
+  delete [] norm_pops;
+
+  return y_hat;
+}
+
+int* match_by_population_unique(double* CI, unsigned int k, int* populations, int num_cities)
+{
+  // normalize the populations
+  double* norm_pops = new double[num_cities];
+  unsigned int max_pop = 0;
+  for (unsigned int i=0; i<num_cities; ++i) {
+    if (populations[i] > 0 && populations[i] > max_pop) {
+      max_pop = populations[i];
+    }
+  }
+  for (unsigned int i=0; i<num_cities; ++i) {
+    norm_pops[i] = (double)populations[i] / (double)max_pop;
+  }
+
+  int* y_hat = new int[num_cities];
+  int* winner = new int[k];
+  double* dist = new double[k];
+  bool* assigned = new bool[k];
+  for (unsigned int i=0; i<k; ++i) {
+    assigned[i] = false;
+  }
+  double d;
+  int nearest;
+  for (unsigned int i=0; i<num_cities; ++i) {
+    if (norm_pops[i] < 0) {
+      y_hat[i] = -1;
+      continue;
+    }
+    for (unsigned int j=0; j<k; ++j) {
+      if (assigned[j]) continue;
+      winner[j] = -1;
+      dist[j] = DBL_MAX;
+      for (unsigned int m=0; m<num_cities; ++m) {
+        if (norm_pops[i] < 0) continue;
+        d = fabs(norm_pops[m] - CI[j]);
+        if (d < dist[j]) {
+          winner[j] = m;
+          dist[j] = d;
+        }
+      }
+    }
+    d = DBL_MAX;
+    nearest = -1;
+    for (unsigned int j=0; j<k; ++j) {
+      if (winner[j] == i && dist[j] < d) {
+        d = dist[j];
+        nearest = j;
+      }
+    }
+    if (nearest > 0) {
+      assigned[nearest] = true;
+    }
+    y_hat[i] = nearest;
   }
 
   delete [] norm_pops;
