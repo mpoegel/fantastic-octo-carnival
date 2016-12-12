@@ -89,6 +89,16 @@ string* read_cities(char* filename)
 }
 
 
+int* random_assignment(graph* g, int num_cities)
+{
+  int* y_hat = new int[num_cities];
+  for (unsigned int i=0; i<num_cities; ++i) {
+    y_hat[i] = rand() % g->num_verts;
+  }
+  return y_hat;
+}
+
+
 void calculate_error(float* g_lat, float* g_lon, int* y_hat, float** latlong, int num_cities)
 {
   double* dists = new double[num_cities];
@@ -188,6 +198,8 @@ int main(int argc, char* argv[])
     exit(EXIT_FAILURE);
   }
 
+  srand(time(0));
+
   char* graph_file = argv[1];
   char* latlong_graph_file = argv[2];
   char* pop_file = argv[3];
@@ -218,6 +230,18 @@ int main(int argc, char* argv[])
              max_degree};
   double* CI;
   int* y_hat;
+
+  /*
+   *
+   */
+  printf("**** random assignment baseline ****\n");
+
+  y_hat = random_assignment(&g, num_cities);
+
+  calculate_error(g.latitudes, g.longitudes, y_hat, latlong, num_cities);
+
+  delete[] y_hat;
+
 
   /*
    * Run analysis on the graph as it is
