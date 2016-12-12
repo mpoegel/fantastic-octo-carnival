@@ -16,3 +16,4 @@ data: init
 
 init:
 	./setup/init.sh
+	./setup/lib.sh
